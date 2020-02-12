@@ -72,7 +72,7 @@ class GlTF(object):
 
     @staticmethod
     def from_binary_arrays(arrays, transform, binary=True, batched=True,
-                           uri=None, textureUri=None):
+                           uri=None, textureUri=None, doubleSided=False):
         """
         Parameters
         ----------
@@ -133,7 +133,7 @@ class GlTF(object):
 
         glTF.header = compute_header(binVertices, nVertices, bb, transform,
                                      textured, batched, batchLength, uri,
-                                     textureUri)
+                                     textureUri, doubleSided)
         glTF.body = np.frombuffer(compute_binary(binVertices, binNormals,
                                   binIds, binUvs), dtype=np.uint8)
 
@@ -149,7 +149,7 @@ def compute_binary(binVertices, binNormals, binIds, binUvs):
 
 
 def compute_header(binVertices, nVertices, bb, transform,
-                   textured, batched, batchLength, uri, textureUri):
+                   textured, batched, batchLength, uri, textureUri, doubleSided):
     # Buffer
     meshNb = len(binVertices)
     sizeVce = []
@@ -277,6 +277,9 @@ def compute_header(binVertices, nVertices, bb, transform,
         },
         'name': 'Material',
     }]
+
+    if doubleSided:
+        materials[0]['doubleSided'] = 'true'
 
     # Final glTF
     header = {
