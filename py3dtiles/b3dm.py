@@ -6,7 +6,7 @@ from .tile import TileContent, TileHeader, TileBody, TileType
 from .gltf import GlTF
 from .batch_table import BatchTable
 from .feature_table import FeatureTable
-import json
+
 
 class B3dm(TileContent):
 
@@ -65,7 +65,7 @@ class B3dm(TileContent):
 
         # build tile body
         b_arr = (array[B3dmHeader.BYTELENGTH:h.tile_byte_length
-                 - B3dmHeader.BYTELENGTH])
+                       - B3dmHeader.BYTELENGTH])
         b = B3dmBody.from_array(h, b_arr)
 
         # build TileContent with header and body

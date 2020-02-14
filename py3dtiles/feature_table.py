@@ -4,6 +4,7 @@ import numpy as np
 from enum import Enum
 import json
 
+
 class SemanticPoint(Enum):
 
     NONE = 0
@@ -15,6 +16,7 @@ class SemanticPoint(Enum):
     NORMAL = 6
     NORMAL_OCT16P = 7
     BATCH_ID = 8
+
 
 class FeatureTable(object):
     """

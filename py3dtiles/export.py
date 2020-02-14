@@ -10,8 +10,6 @@ import errno
 import numpy as np
 from py3dtiles import TriangleSoup, GlTF, B3dm, BatchTable
 from .feature_table import FeatureTable
-# from .feature_table import FeatureTableHeader
-from .feature_table import SemanticPoint
 
 
 class BoundingBox():
