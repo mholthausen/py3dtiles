@@ -81,7 +81,7 @@ class Node():
             },
             "geometricError": error,  # TODO
             "children": [n.to_tileset_r(error / 2.) for n in self.children],
-            "refine": "add"
+            "refine": "ADD"
         }
         if len(self.features) != 0:
             tile["content"] = {
