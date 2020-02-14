@@ -2,7 +2,7 @@
 
 from .utils import TileContentReader, convert_to_ecef
 from .tile import TileContent
-from .feature_table import Feature
+from .feature_table import FeatureTable
 from .gltf import GlTF
 from .pnts import Pnts
 from .b3dm import B3dm
