@@ -9,6 +9,7 @@ import os
 import errno
 import numpy as np
 from py3dtiles import TriangleSoup, GlTF, B3dm, BatchTable
+from .feature_table import FeatureTable
 
 
 class BoundingBox():
@@ -190,9 +191,13 @@ def arrays2tileset(positions, normals, bboxes, transform, ids=None, doubleSided=
             gltf = GlTF.from_binary_arrays(binarrays, identity, doubleSided=doubleSided)
             bt = None
             if ids is not None:
+                ft = FeatureTable()
+                ft.add_property_from_value("BATCH_LENGTH", len(gids))
+
                 bt = BatchTable()
                 bt.add_property_from_array("id", gids)
-            b3dm = B3dm.from_glTF(gltf, bt).to_array()
+
+            b3dm = B3dm.from_glTF(gltf, bt=bt, ft=ft).to_array()
             f = open("tiles/{0}.b3dm".format(node.id), 'wb')
             f.write(b3dm)
 
