@@ -107,7 +107,7 @@ def tile_extent(extent, size, i, j):
 
 
 # TODO: transform
-def arrays2tileset(positions, normals, bboxes, transform, ids=None):
+def arrays2tileset(positions, normals, bboxes, transform, ids=None, doubleSided=False):
     print("Creating tileset...")
     maxTileSize = 2000
     featuresPerTile = 20
@@ -187,7 +187,7 @@ def arrays2tileset(positions, normals, bboxes, transform, ids=None):
                 })
                 if ids is not None:
                     gids.append(ids[pos])
-            gltf = GlTF.from_binary_arrays(binarrays, identity)
+            gltf = GlTF.from_binary_arrays(binarrays, identity, doubleSided=doubleSided)
             bt = None
             if ids is not None:
                 bt = BatchTable()
@@ -221,15 +221,15 @@ def divide(extent, geometries, xOffset, yOffset, tileSize,
                 parent.add(node)
 
 
-def wkbs2tileset(wkbs, ids, transform):
+def wkbs2tileset(wkbs, ids, transform, doubleSided):
     geoms = [TriangleSoup.from_wkb_multipolygon(wkb) for wkb in wkbs]
     positions = [ts.getPositionArray() for ts in geoms]
     normals = [ts.getNormalArray() for ts in geoms]
     bboxes = [ts.getBbox() for ts in geoms]
-    arrays2tileset(positions, normals, bboxes, transform, ids)
+    arrays2tileset(positions, normals, bboxes, transform, ids, doubleSided)
 
 
-def from_db(db_name, table_name, column_name, id_column_name, user_name, host=None, port=None):
+def from_db(db_name, table_name, column_name, id_column_name, user_name, host=None, port=None, doubleSided=False):
     user = getpass.getuser() if user_name is None else user_name
 
     try:
@@ -267,10 +267,10 @@ def from_db(db_name, table_name, column_name, id_column_name, user_name, host=No
         [0, 0, 0, 1]], dtype=float)
     transform = transform.flatten('F')
 
-    wkbs2tileset(wkbs, ids, transform)
+    wkbs2tileset(wkbs, ids, transform, doubleSided)
 
 
-def from_directory(directory, offset):
+def from_directory(directory, offset, doubleSided=False):
     # TODO: improvement -> order wkbs by geometry size, similarly to database mode
     offset = (0, 0, 0) if offset is None else offset
     # open all wkbs from directory
@@ -289,7 +289,7 @@ def from_directory(directory, offset):
         [0, 0, 1, offset[2]],
         [0, 0, 0, 1]], dtype=float)
     transform = transform.flatten('F')
-    wkbs2tileset(wkbs, None, transform)
+    wkbs2tileset(wkbs, None, transform, doubleSided)
 
 
 def init_parser(subparser, str2bool):
@@ -324,6 +324,9 @@ def init_parser(subparser, str2bool):
     P_help = 'database port'
     parser.add_argument('-P', metavar='PORT', type=int, help=P_help)
 
+    ds_help = 'glTF doubleSided'
+    parser.add_argument('-ds', metavar='DOUBLESIDED', type=bool, help=ds_help)
+
 
 def main(args):
     if args.D is not None:
@@ -331,7 +334,7 @@ def main(args):
             print('Error: please define a table (-t) and column (-c)')
             exit()
 
-        from_db(args.D, args.t, args.c, args.i, args.u, args.H, args.P)
+        from_db(args.D, args.t, args.c, args.i, args.u, args.H, args.P, args.ds)
     elif args.d is not None:
         from_directory(args.d, args.o)
     else:
