@@ -111,7 +111,6 @@ def tile_extent(extent, size, i, j):
 def arrays2tileset(positions, normals, bboxes, transform, ids=None, doubleSided=False):
     print("Creating tileset...")
     maxTileSize = 2000
-    featuresPerTile = 20
     indices = [i for i in range(len(positions))]
 
     # glTF is Y-up, so to get the bounding boxes in the 3D tiles
@@ -140,28 +139,23 @@ def arrays2tileset(positions, normals, bboxes, transform, ids=None, doubleSided=
 
     # Create quadtree
     tree = Node()
+    tilesArr = []
     for i in range(0, int(math.ceil(extentX / maxTileSize))):
         for j in range(0, int(math.ceil(extentY / maxTileSize))):
             tile = tile_extent(extent, maxTileSize, i, j)
 
-            geoms = []
             for idx, box in zip(indices, zUpBboxes):
                 bbox = BoundingBox(box[0], box[1])
 
                 if tile.inside(bbox.center()):
-                    geoms.append(Feature(idx, bbox))
+                    tilesArr.append([idx, Feature(idx, bbox)])
 
-            if len(geoms) == 0:
-                continue
-
-            if len(geoms) > featuresPerTile:
-                node = Node(geoms[0:featuresPerTile])
-                tree.add(node)
-                divide(tile, geoms[featuresPerTile:len(geoms)], i * 2,
-                       j * 2, maxTileSize / 2., featuresPerTile, node)
-            else:
-                node = Node(geoms)
-                tree.add(node)
+    # Sort geoms by id before creating the b3dm and tileset
+    npTiles = np.asarray(tilesArr)
+    npTiles = npTiles[np.argsort(npTiles[:, 0])]
+    for npTile in npTiles:
+        node = Node([npTile[1]])
+        tree.add(node)
 
     # Export b3dm & tileset
     tileset = tree.to_tileset(transform)
@@ -257,7 +251,7 @@ def from_db(db_name, table_name, column_name, id_column_name, user_name, host=No
     if id_column_name is not None:
         id_statement = "," + id_column_name
     cur.execute("SELECT ST_AsBinary(ST_RotateX(ST_Translate({0}, {1}, {2}, {3}), -pi() / 2)),"
-                "ST_Area(ST_Force2D({0})) AS weight{5} FROM {4} ORDER BY weight DESC"
+                "ST_Area(ST_Force2D({0})) AS weight{5} FROM {4} ORDER BY id ASC"
                 .format(column_name, -offset[0], -offset[1], -offset[2],
                         table_name, id_statement))
     res = cur.fetchall()
