@@ -37,7 +37,7 @@ class TestTileContentBuilder(unittest.TestCase):
                [8.8036420000717, 7.29930999968201, 2.05386103222656]]
         arrays = [{
             'position': positions,
-            'normal': normals,
+            'normal': normals[1],
             'bbox': box
         }]
 
@@ -54,7 +54,7 @@ class TestTileContentBuilder(unittest.TestCase):
         # get an array
         t.to_array()
         self.assertEqual(t.header.version, 1.0)
-        self.assertEqual(t.header.tile_byte_length, 2952)
+        self.assertEqual(t.header.tile_byte_length, 2860)
         self.assertEqual(t.header.ft_json_byte_length, 0)
         self.assertEqual(t.header.ft_bin_byte_length, 0)
         self.assertEqual(t.header.bt_json_byte_length, 0)
@@ -78,7 +78,7 @@ class TestTexturedTileBuilder(unittest.TestCase):
                [10, 10, 0]]
         arrays = [{
             'position': positions,
-            'normal': normals,
+            'normal': normals[1],
             'uv': uvs,
             'bbox': box
         }]
@@ -95,7 +95,7 @@ class TestTexturedTileBuilder(unittest.TestCase):
         # get an array
         t.to_array()
         self.assertEqual(t.header.version, 1.0)
-        self.assertEqual(t.header.tile_byte_length, 1556)
+        self.assertEqual(t.header.tile_byte_length, 1492)
         self.assertEqual(t.header.ft_json_byte_length, 0)
         self.assertEqual(t.header.ft_bin_byte_length, 0)
         self.assertEqual(t.header.bt_json_byte_length, 0)
