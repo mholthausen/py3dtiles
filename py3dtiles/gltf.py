@@ -72,7 +72,8 @@ class GlTF(object):
 
     @staticmethod
     def from_binary_arrays(arrays, transform, binary=True, batched=True,
-                           uri=None, textureUri=None, doubleSided=False):
+                           uri=None, textureUri=None, doubleSided=False,
+                           nMaxMin=[[1, 1, 1], [-1, -1, -1]]):
         """
         Parameters
         ----------
@@ -119,7 +120,7 @@ class GlTF(object):
             binUvs = [b''.join(binUvs)]
             binIds = [b''.join(binIds)]
             nVertices = [sum(nVertices)]
-            batchLength = len(arrays)
+            batchLength = len(arrays) - 1
             [minx, miny, minz] = bb[0][0]
             [maxx, maxy, maxz] = bb[0][1]
             for box in bb[1:]:
@@ -133,7 +134,7 @@ class GlTF(object):
 
         glTF.header = compute_header(binVertices, nVertices, bb, transform,
                                      textured, batched, batchLength, uri,
-                                     textureUri, doubleSided)
+                                     textureUri, doubleSided, nMaxMin)
         glTF.body = np.frombuffer(compute_binary(binVertices, binNormals,
                                   binIds, binUvs), dtype=np.uint8)
 
@@ -149,7 +150,9 @@ def compute_binary(binVertices, binNormals, binIds, binUvs):
 
 
 def compute_header(binVertices, nVertices, bb, transform,
-                   textured, batched, batchLength, uri, textureUri, doubleSided):
+                   textured, batched, batchLength, uri, textureUri, doubleSided,
+                   nMaxMin):
+
     # Buffer
     meshNb = len(binVertices)
     sizeVce = []
@@ -207,8 +210,8 @@ def compute_header(binVertices, nVertices, bb, transform,
             'byteOffset': sum(sizeVce[0:i]),
             'componentType': 5126,
             'count': nVertices[i],
-            'max': [bb[i][0][1], bb[i][0][2], bb[i][0][0]],
-            'min': [bb[i][1][1], bb[i][1][2], bb[i][1][0]],
+            'max': [bb[i][1][0], bb[i][1][1], bb[i][1][2]],
+            'min': [bb[i][0][0], bb[i][0][1], bb[i][0][2]],
             'type': "VEC3"
         })
         # normals
@@ -217,8 +220,8 @@ def compute_header(binVertices, nVertices, bb, transform,
             'byteOffset': sum(sizeVce[0:i]),
             'componentType': 5126,
             'count': nVertices[i],
-            'max': [1, 1, 1],
-            'min': [-1, -1, -1],
+            'max': np.asarray(nMaxMin[0], dtype=np.float64).tolist(),
+            'min': np.asarray(nMaxMin[1], dtype=np.float64).tolist(),
             'type': "VEC3"
         })
         if textured:
@@ -266,7 +269,6 @@ def compute_header(binVertices, nVertices, bb, transform,
     nodes = []
     for i in range(0, meshNb):
         nodes.append({
-            'matrix': [float(e) for e in transform],
             'mesh': i
         })
 
@@ -279,7 +281,7 @@ def compute_header(binVertices, nVertices, bb, transform,
     }]
 
     if doubleSided:
-        materials[0]['doubleSided'] = 'true'
+        materials[0]['doubleSided'] = True
 
     # Final glTF
     header = {

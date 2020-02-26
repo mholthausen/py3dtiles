@@ -177,12 +177,14 @@ def arrays2tileset(positions, normals, bboxes, transform, ids=None, doubleSided=
                 pos = feature.index
                 binarrays.append({
                     'position': positions[pos],
-                    'normal': normals[pos],
+                    'normal': normals[pos][1],
                     'bbox': [[float(i) for i in j] for j in bboxes[pos]],
                 })
                 if ids is not None:
                     gids.append(ids[pos])
-            gltf = GlTF.from_binary_arrays(binarrays, identity, doubleSided=doubleSided)
+            gltf = GlTF.from_binary_arrays(binarrays, identity,
+                                           doubleSided=doubleSided,
+                                           nMaxMin=normals[pos][0])
             bt = None
             if ids is not None:
                 ft = FeatureTable()

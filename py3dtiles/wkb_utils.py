@@ -91,7 +91,8 @@ class TriangleSoup:
 
         Returns
         -------
-        Binary array of vertice normals
+        Array of min and max of vertice normals and binary array of
+        vertice normals
         """
         normals = []
         for t in self.triangles[0]:
@@ -105,7 +106,18 @@ class TriangleSoup:
                 normals.append(N / norm)
 
         verticeArray = faceAttributeToArray(normals)
-        return b''.join(verticeArray)
+        lx = []
+        ly = []
+        lz = []
+        for t in verticeArray:
+            lx.append(t[0])
+            ly.append(t[1])
+            lz.append(t[2])
+
+        nMinMax = [[np.max(lx), np.max(ly), np.max(lz)],
+                   [np.min(lx), np.min(ly), np.min(lz)]]
+
+        return [nMinMax, b''.join(verticeArray)]
 
     def getBbox(self):
         """
