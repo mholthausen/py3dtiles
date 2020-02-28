@@ -196,6 +196,8 @@ def arrays2tileset(positions, normals, bboxes, transform, ids=None, doubleSided=
             b3dm = B3dm.from_glTF(gltf, bt=bt, ft=ft).to_array()
             f = open("tiles/{0}.b3dm".format(node.id), 'wb')
             f.write(b3dm)
+            f = open("gltf/{0}.glb".format(node.id), 'wb')
+            f.write(gltf.to_array())
 
 
 def divide(extent, geometries, xOffset, yOffset, tileSize,
