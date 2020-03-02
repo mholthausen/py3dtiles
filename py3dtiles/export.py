@@ -11,7 +11,7 @@ import numpy as np
 from py3dtiles import TriangleSoup, GlTF, B3dm, BatchTable
 from .feature_table import FeatureTable
 from pyproj import Proj, transform
-
+from pyproj import transform as projtransform
 
 class BoundingBox():
     def __init__(self, minimum, maximum):
@@ -50,18 +50,17 @@ class Node():
         self.children.append(node)
 
     def compute_bbox(self):
+        print (self)
         self.box = BoundingBox(
             [float("inf"), float("inf"), float("inf")],
             [-float("inf"), -float("inf"), -float("inf")])
         for c in self.children:
+            print ('child')
             c.compute_bbox()
-            print(c.box.min)
-            print(c.box.max)
             self.box.add(c.box)
         for g in self.features:
-            print(g.box.min)
-            print(g.box.max)
-            self.box.add(g.box)
+            print ('feature')
+            self.box.add(BoundingBox(g.box[0], g.box[1]))
 
     def to_tileset(self, transform):
         self.compute_bbox()
@@ -76,18 +75,17 @@ class Node():
     def to_tileset_r(self, error):
 
         (c1, c2) = (self.box.min, self.box.max)
-        print((c1, c2))
-        inProj = Proj(init='epsg:4978')
-        outProj = Proj(init='epsg:4326')
-        xmin,ymin = c1[0],c1[1]
-        xmin,ymin = transform(inProj,outProj,xmin,ymin)
-        xmax,ymax = c2[0],c2[1]
-        xmax,ymax = transform(inProj,outProj,xmax,ymax)
+        inProj = Proj(init='epsg:4979')
+        outProj = Proj(init='epsg:4979')
+        xmin,ymin,zmin = c1[0],c1[1],c1[2]
+        xmin,ymin,zmin = transform(inProj,outProj,xmin,ymin,zmin)
+        xmax,ymax,zmax = c2[0],c2[1],c2[2]
+        xmax,ymax,zmax = transform(inProj,outProj,xmax,ymax,zmax)
 
         xmin,ymin =  xmin / 180 * math.pi, ymin / 180 * math.pi
         xmax,ymax =  xmax  / 180 * math.pi ,ymax / 180 * math.pi
 
-        region = [xmin, ymin, xmax, ymax, c1[2], c2[2]]
+        region = [ymin, xmin, ymax, xmax, c1[2], c2[2]]
         # center = [(c1[i] + c2[i]) / 2 for i in range(0, 3)]
         # xAxis = [(c2[0] - c1[0]) / 2, 0, 0]
         # yAxis = [0, (c2[1] - c1[1]) / 2, 0]
@@ -128,7 +126,7 @@ def tile_extent(extent, size, i, j):
 
 
 # TODO: transform
-def arrays2tileset(positions, normals, bboxes, transform, ids=None, doubleSided=False):
+def arrays2tileset(positions, normals, bboxes, transform, ids=None, doubleSided=False, connection=False):
     print("Creating tileset...")
     maxTileSize = 2000
     indices = [i for i in range(len(positions))]
@@ -145,21 +143,39 @@ def arrays2tileset(positions, normals, bboxes, transform, ids=None, doubleSided=
         zUpBboxes.append([m, M])
 
     # Compute extent
-    # xMin = yMin = float('inf')
-    # xMax = yMax = - float('inf')
     GxMin = GyMin = float('inf')
     GxMax = GyMax = - float('inf')
 
-    # for bbox in zUpBboxes:
-    #     xMin = min(xMin, bbox[0][0])
-    #     yMin = min(yMin, bbox[0][1])
-    #     xMax = max(xMax, bbox[1][0])
-    #     yMax = max(yMax, bbox[1][1])
     for bbox in bboxes:
         GxMin = min(GxMin, float(bbox[0][0]))
         GyMin = min(GyMin, float(bbox[0][1]))
         GxMax = max(GxMax, float(bbox[1][0]))
         GyMax = max(GyMax, float(bbox[1][1]))
+
+    bboxes4978 = []
+
+    cur = connection.cursor()
+
+    column_name = "geom"
+    table_name = "surface"
+
+    for id in ids:
+        cur.execute("SELECT ST_3DExtent(ST_Transform({0}, 4978)) FROM {1} WHERE id = {2}".format(column_name, table_name, id))
+        extent = cur.fetchall()[0][0]
+        extent = [m.split(" ") for m in extent[6:-1].split(",")]
+        bboxes4978.append(extent)
+        print(bboxes4978)
+
+    # inProj = Proj(init='epsg:4326')
+    # outProj = Proj(init='epsg:4978')
+    # bboxes4978 = []
+    # for bbox in bboxes:
+    #     print("----------")
+    #     print(bbox)
+    #     print("----------")
+    #     xMin, yMin = projtransform(inProj, outProj, float(bbox[0][0]), float(bbox[0][1]))
+    #     xMax, yMax = projtransform(inProj, outProj, float(bbox[1][0]), float(bbox[1][1]))
+    #     bboxes4978.append([[xMin, yMin, bbox[0][2]], [xMax, yMax, bbox[1][2]]])
 
     extentX = GxMax - GxMin
     extentY = GyMax - GyMin
@@ -167,19 +183,9 @@ def arrays2tileset(positions, normals, bboxes, transform, ids=None, doubleSided=
     # Create quadtree
     tree = Node()
     tilesArr = []
-    print('extentX')
-    print(extentX)
-    print(extentY)
-    for i in range(0, int(math.ceil(extentX / maxTileSize))):
-        for j in range(0, int(math.ceil(extentY / maxTileSize))):
-            
-            tile = tile_extent(bboxes[i], maxTileSize, i, j)
 
-            for idx, box in zip(indices, bboxes):
-                bbox = BoundingBox(box[0], box[1])
-
-                if tile.inside(bbox.center()):
-                    tilesArr.append([idx, Feature(idx, bbox)])
+    for idx, box in zip(indices, bboxes):
+        tilesArr.append([idx, Feature(idx, box)])
 
     # Sort geoms by id before creating the b3dm and tileset
     npTiles = np.asarray(tilesArr)
@@ -209,7 +215,7 @@ def arrays2tileset(positions, normals, bboxes, transform, ids=None, doubleSided=
                 binarrays.append({
                     'position': positions[pos],
                     'normal': normals[pos][1],
-                    'bbox': [[float(i) for i in j] for j in bboxes[pos]],
+                    'bbox': [[float(i) for i in j] for j in bboxes4978[pos]],
                 })
                 if ids is not None:
                     gids.append(ids[pos])
@@ -255,7 +261,7 @@ def divide(extent, geometries, xOffset, yOffset, tileSize,
                 parent.add(node)
 
 
-def wkbs2tileset(wkbs, ids, transform, doubleSided, extent, connection):
+def wkbs2tileset(wkbs, ids, transform, doubleSided, extent, connection, wkbs4978):
     cur = connection.cursor()
 
     table_name = 'surface'
@@ -270,13 +276,13 @@ def wkbs2tileset(wkbs, ids, transform, doubleSided, extent, connection):
         extents.append(extent)
         print(extent)
 
-    geoms = [TriangleSoup.from_wkb_multipolygon(wkb, extent) for wkb, extent in zip(wkbs, extents)]
+    geoms = [TriangleSoup.from_wkb_multipolygon(wkb, extent) for wkb, extent in zip(wkbs4978, extents)]
     positions = [ts.getPositionArray() for ts in geoms]
     normals = [ts.getNormalArray() for ts in geoms]
     # bboxes = [ts.getBbox() for ts in geoms]
     bboxes = [ts.getExtent() for ts in geoms]
 
-    arrays2tileset(positions, normals, bboxes, transform, ids, doubleSided)
+    arrays2tileset(positions, normals, bboxes, transform, ids, doubleSided, connection)
 
 
 def from_db(db_name, table_name, column_name, id_column_name, user_name, host=None, port=None, doubleSided=False):
@@ -298,10 +304,15 @@ def from_db(db_name, table_name, column_name, id_column_name, user_name, host=No
               (float(extent[1][1]) + float(extent[0][1])) / 2,
               (float(extent[1][2]) + float(extent[0][2])) / 2]
 
+    print("-----------EXTENT")
+    print(extent)
+    print("--------OFFSET")
+    print(offset)
+
     id_statement = ""
     if id_column_name is not None:
         id_statement = "," + id_column_name
-    cur.execute("SELECT ST_AsBinary(ST_RotateX(ST_Translate({0}, {1}, {2}, {3}), -pi() / 2)),"
+    cur.execute("SELECT ST_AsBinary(ST_RotateX(st_transform({0}, 4978), -pi() / 2)), ST_AsBinary(ST_RotateX(ST_Translate({0}, {1}, {2}, {3}), -pi() / 2)),"
                 "ST_Area(ST_Force2D({0})) AS weight{5}, id FROM {4} ORDER BY id ASC"
                 .format(column_name, -offset[0], -offset[1], -offset[2],
                         table_name, id_statement))
@@ -309,19 +320,33 @@ def from_db(db_name, table_name, column_name, id_column_name, user_name, host=No
                 "ST_Area(ST_Force2D({0})) AS weight{5} FROM {4} ORDER BY id ASC"
                 .format(column_name, -offset[0], -offset[1], -offset[2],
                         table_name, id_statement))
+
+    inProj = Proj(init='epsg:4979')
+    outProj = Proj(init='epsg:3857')
+    xoffset, yoffset = offset[0], offset[1];
+    yoffset, xoffset = projtransform(inProj, outProj, xoffset, yoffset)
+    inProj = Proj(init='epsg:4979')
+    outProj = Proj(init='epsg:4978')
+    zoffset = offset[2];
+    print ('trans:')
+    print (str(xoffset) + '/' + str(yoffset) + '/' + str(zoffset))
+    print (projtransform(inProj, outProj, offset[0], offset[1], zoffset))
+    unused1, unused2, zoffset = projtransform(inProj, outProj, offset[0], offset[1], zoffset)
+
     res = cur.fetchall()
-    wkbs = [t[0] for t in res]
+    wkbs = [t[1] for t in res]
+    wkbs4978 = [t[0] for t in res]
     ids = None
     if id_column_name is not None:
-        ids = [t[3] for t in res]
+        ids = [t[4] for t in res]
     transform = np.array([
-        [1, 0, 0, offset[0]],
-        [0, 1, 0, offset[1]],
-        [0, 0, 1, offset[2]],
+        [1, 0, 0, xoffset],
+        [0, 1, 0, yoffset],
+        [0, 0, 1, zoffset],
         [0, 0, 0, 1]], dtype=float)
     transform = transform.flatten('F')
 
-    wkbs2tileset(wkbs, ids, transform, doubleSided, extent, connection)
+    wkbs2tileset(wkbs, ids, transform, doubleSided, extent, connection, wkbs4978)
 
 
 def from_directory(directory, offset, doubleSided=False):

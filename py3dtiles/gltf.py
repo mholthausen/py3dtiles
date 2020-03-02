@@ -205,6 +205,8 @@ def compute_header(binVertices, nVertices, bb, transform,
     accessors = []
     for i in range(0, meshNb):
         # vertices
+        print ('gltf')
+        print (bb)
         accessors.append({
             'bufferView': 0,
             'byteOffset': sum(sizeVce[0:i]),
