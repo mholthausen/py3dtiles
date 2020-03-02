@@ -10,6 +10,7 @@ import errno
 import numpy as np
 from py3dtiles import TriangleSoup, GlTF, B3dm, BatchTable
 from .feature_table import FeatureTable
+from pyproj import Proj, transform
 
 
 class BoundingBox():
@@ -54,8 +55,12 @@ class Node():
             [-float("inf"), -float("inf"), -float("inf")])
         for c in self.children:
             c.compute_bbox()
+            print(c.box.min)
+            print(c.box.max)
             self.box.add(c.box)
         for g in self.features:
+            print(g.box.min)
+            print(g.box.max)
             self.box.add(g.box)
 
     def to_tileset(self, transform):
@@ -69,15 +74,29 @@ class Node():
         return tiles
 
     def to_tileset_r(self, error):
+
         (c1, c2) = (self.box.min, self.box.max)
-        center = [(c1[i] + c2[i]) / 2 for i in range(0, 3)]
-        xAxis = [(c2[0] - c1[0]) / 2, 0, 0]
-        yAxis = [0, (c2[1] - c1[1]) / 2, 0]
-        zAxis = [0, 0, (c2[2] - c1[2]) / 2]
-        box = [round(x, 3) for x in center + xAxis + yAxis + zAxis]
+        print((c1, c2))
+        inProj = Proj(init='epsg:4978')
+        outProj = Proj(init='epsg:4326')
+        xmin,ymin = c1[0],c1[1]
+        xmin,ymin = transform(inProj,outProj,xmin,ymin)
+        xmax,ymax = c2[0],c2[1]
+        xmax,ymax = transform(inProj,outProj,xmax,ymax)
+
+        xmin,ymin =  xmin / 180 * math.pi, ymin / 180 * math.pi
+        xmax,ymax =  xmax  / 180 * math.pi ,ymax / 180 * math.pi
+
+        region = [xmin, ymin, xmax, ymax, c1[2], c2[2]]
+        # center = [(c1[i] + c2[i]) / 2 for i in range(0, 3)]
+        # xAxis = [(c2[0] - c1[0]) / 2, 0, 0]
+        # yAxis = [0, (c2[1] - c1[1]) / 2, 0]
+        # zAxis = [0, 0, (c2[2] - c1[2]) / 2]
+        # box = [round(x, 3) for x in center + xAxis + yAxis + zAxis]
+        # print(box)
         tile = {
             "boundingVolume": {
-                "box": box
+                "region": region
             },
             "geometricError": error,  # TODO
             "children": [n.to_tileset_r(error / 2.) for n in self.children],
@@ -98,12 +117,13 @@ class Node():
 
 
 def tile_extent(extent, size, i, j):
+    bbox = BoundingBox(extent[0], extent[1])
     minExtent = [
-        extent.min[0] + i * size,
-        extent.min[1] + j * size]
+        bbox.min[0] + i * size,
+        bbox.min[1] + j * size]
     maxExtent = [
-        extent.min[0] + (i + 1) * size,
-        extent.min[1] + (j + 1) * size]
+        bbox.min[0] + (i + 1) * size,
+        bbox.min[1] + (j + 1) * size]
     return BoundingBox(minExtent, maxExtent)
 
 
@@ -125,26 +145,37 @@ def arrays2tileset(positions, normals, bboxes, transform, ids=None, doubleSided=
         zUpBboxes.append([m, M])
 
     # Compute extent
-    xMin = yMin = float('inf')
-    xMax = yMax = - float('inf')
+    # xMin = yMin = float('inf')
+    # xMax = yMax = - float('inf')
+    GxMin = GyMin = float('inf')
+    GxMax = GyMax = - float('inf')
 
-    for bbox in zUpBboxes:
-        xMin = min(xMin, bbox[0][0])
-        yMin = min(yMin, bbox[0][1])
-        xMax = max(xMax, bbox[1][0])
-        yMax = max(yMax, bbox[1][1])
-    extent = BoundingBox([xMin, yMin], [xMax, yMax])
-    extentX = xMax - xMin
-    extentY = yMax - yMin
+    # for bbox in zUpBboxes:
+    #     xMin = min(xMin, bbox[0][0])
+    #     yMin = min(yMin, bbox[0][1])
+    #     xMax = max(xMax, bbox[1][0])
+    #     yMax = max(yMax, bbox[1][1])
+    for bbox in bboxes:
+        GxMin = min(GxMin, float(bbox[0][0]))
+        GyMin = min(GyMin, float(bbox[0][1]))
+        GxMax = max(GxMax, float(bbox[1][0]))
+        GyMax = max(GyMax, float(bbox[1][1]))
+
+    extentX = GxMax - GxMin
+    extentY = GyMax - GyMin
 
     # Create quadtree
     tree = Node()
     tilesArr = []
+    print('extentX')
+    print(extentX)
+    print(extentY)
     for i in range(0, int(math.ceil(extentX / maxTileSize))):
         for j in range(0, int(math.ceil(extentY / maxTileSize))):
-            tile = tile_extent(extent, maxTileSize, i, j)
+            
+            tile = tile_extent(bboxes[i], maxTileSize, i, j)
 
-            for idx, box in zip(indices, zUpBboxes):
+            for idx, box in zip(indices, bboxes):
                 bbox = BoundingBox(box[0], box[1])
 
                 if tile.inside(bbox.center()):
@@ -224,11 +255,27 @@ def divide(extent, geometries, xOffset, yOffset, tileSize,
                 parent.add(node)
 
 
-def wkbs2tileset(wkbs, ids, transform, doubleSided):
-    geoms = [TriangleSoup.from_wkb_multipolygon(wkb) for wkb in wkbs]
+def wkbs2tileset(wkbs, ids, transform, doubleSided, extent, connection):
+    cur = connection.cursor()
+
+    table_name = 'surface'
+    column_name = 'geom'
+
+    extents = []
+
+    for id in ids:
+        cur.execute("SELECT ST_3DExtent({0}) FROM {1} WHERE id = {2}".format(column_name, table_name, id))
+        extent = cur.fetchall()[0][0]
+        extent = [m.split(" ") for m in extent[6:-1].split(",")]
+        extents.append(extent)
+        print(extent)
+
+    geoms = [TriangleSoup.from_wkb_multipolygon(wkb, extent) for wkb, extent in zip(wkbs, extents)]
     positions = [ts.getPositionArray() for ts in geoms]
     normals = [ts.getNormalArray() for ts in geoms]
-    bboxes = [ts.getBbox() for ts in geoms]
+    # bboxes = [ts.getBbox() for ts in geoms]
+    bboxes = [ts.getExtent() for ts in geoms]
+
     arrays2tileset(positions, normals, bboxes, transform, ids, doubleSided)
 
 
@@ -255,6 +302,10 @@ def from_db(db_name, table_name, column_name, id_column_name, user_name, host=No
     if id_column_name is not None:
         id_statement = "," + id_column_name
     cur.execute("SELECT ST_AsBinary(ST_RotateX(ST_Translate({0}, {1}, {2}, {3}), -pi() / 2)),"
+                "ST_Area(ST_Force2D({0})) AS weight{5}, id FROM {4} ORDER BY id ASC"
+                .format(column_name, -offset[0], -offset[1], -offset[2],
+                        table_name, id_statement))
+    print("SELECT ST_AsBinary(ST_RotateX(ST_Translate({0}, {1}, {2}, {3}), -pi() / 2)),"
                 "ST_Area(ST_Force2D({0})) AS weight{5} FROM {4} ORDER BY id ASC"
                 .format(column_name, -offset[0], -offset[1], -offset[2],
                         table_name, id_statement))
@@ -262,7 +313,7 @@ def from_db(db_name, table_name, column_name, id_column_name, user_name, host=No
     wkbs = [t[0] for t in res]
     ids = None
     if id_column_name is not None:
-        ids = [t[2] for t in res]
+        ids = [t[3] for t in res]
     transform = np.array([
         [1, 0, 0, offset[0]],
         [0, 1, 0, offset[1]],
@@ -270,7 +321,7 @@ def from_db(db_name, table_name, column_name, id_column_name, user_name, host=No
         [0, 0, 0, 1]], dtype=float)
     transform = transform.flatten('F')
 
-    wkbs2tileset(wkbs, ids, transform, doubleSided)
+    wkbs2tileset(wkbs, ids, transform, doubleSided, extent, connection)
 
 
 def from_directory(directory, offset, doubleSided=False):

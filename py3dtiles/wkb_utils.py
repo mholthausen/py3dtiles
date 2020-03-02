@@ -9,7 +9,7 @@ class TriangleSoup:
         self.triangles = []
 
     @staticmethod
-    def from_wkb_multipolygon(wkb, associatedData=[]):
+    def from_wkb_multipolygon(wkb, extent=None, associatedData=[]):
         """
         Parameters
         ----------
@@ -51,6 +51,19 @@ class TriangleSoup:
 
         ts = TriangleSoup()
         ts.triangles = trianglesArray
+
+        ts.extent = [
+            [
+                float(extent[0][0]),
+                float(extent[0][1]),
+                float(extent[0][2])
+            ],
+            [
+                float(extent[1][0]),
+                float(extent[1][1]),
+                float(extent[1][2])
+            ]
+        ]
 
         return ts
 
@@ -131,6 +144,17 @@ class TriangleSoup:
         mins = np.array([np.min(t, 0) for t in self.triangles[0]])
         maxs = np.array([np.max(t, 0) for t in self.triangles[0]])
         return [np.min(mins, 0), np.max(maxs, 0)]
+
+    def getExtent(self):
+        """
+        Parameters
+        ----------
+
+        Returns
+        -------
+        Array [[minX, minY, minZ],[maxX, maxY, maxZ]]
+        """
+        return self.extent
 
 
 def faceAttributeToArray(triangles):
