@@ -130,6 +130,12 @@ class TriangleSoup:
         """
         mins = np.array([np.min(t, 0) for t in self.triangles[0]])
         maxs = np.array([np.max(t, 0) for t in self.triangles[0]])
+
+        print("---bbox")
+        print(mins)
+        print(maxs)
+        print("---bbox")
+
         return [np.min(mins, 0), np.max(maxs, 0)]
 
 
