@@ -38,8 +38,9 @@ class Feature():
 class Node():
     counter = 0
 
-    def __init__(self, features=[]):
+    def __init__(self, features=[], layerId=None):
         self.id = Node.counter
+        self.layerId = layerId
         Node.counter += 1
         self.features = features
         if len(features) == 1:
@@ -81,8 +82,12 @@ class Node():
             },
             "geometricError": error,  # TODO
             "children": [n.to_tileset_r(error / 2.) for n in self.children],
-            "refine": "ADD"
+            "refine": "ADD",
+            "extras": {
+                "id": self.layerId
+            }
         }
+
         if len(self.features) != 0:
             tile["content"] = {
                 "uri": "tiles/{0}.b3dm".format(self.id)
@@ -108,7 +113,7 @@ def tile_extent(extent, size, i, j):
 
 
 # TODO: transform
-def arrays2tileset(positions, normals, bboxes, bboxesNonRotated, transform, ids=None, doubleSided=False):
+def arrays2tileset(positions, normals, bboxes, bboxesNonRotated, transform, ids=None, doubleSided=False, layerId=None):
     print("Creating tileset...")
     maxTileSize = 2000
     indices = [i for i in range(len(positions))]
@@ -144,7 +149,7 @@ def arrays2tileset(positions, normals, bboxes, bboxesNonRotated, transform, ids=
     npTiles = np.asarray(tilesArr)
     npTiles = npTiles[np.argsort(npTiles[:, 0])]
     for npTile in npTiles:
-        node = Node([npTile[1]])
+        node = Node([npTile[1]], layerId=layerId)
         tree.add(node)
 
     # Export b3dm & tileset
@@ -212,16 +217,16 @@ def divide(extent, geometries, xOffset, yOffset, tileSize,
                 parent.add(node)
 
 
-def wkbs2tileset(wkbs, extentNonRotated, ids, transform, doubleSided):
+def wkbs2tileset(wkbs, extentNonRotated, ids, transform, doubleSided, layerId):
     geoms = [TriangleSoup.from_wkb_multipolygon(wkb) for wkb in wkbs]
     positions = [ts.getPositionArray() for ts in geoms]
     normals = [ts.getNormalArray() for ts in geoms]
     bboxes = [ts.getBbox() for ts in geoms]
     bboxesNonRotated = extentNonRotated
-    arrays2tileset(positions, normals, bboxes, bboxesNonRotated, transform, ids, doubleSided)
+    arrays2tileset(positions, normals, bboxes, bboxesNonRotated, transform, ids, doubleSided, layerId)
 
 
-def from_db(db_name, table_name, column_name, id_column_name, user_name, host=None, port=None, doubleSided=False):
+def from_db(db_name, table_name, column_name, id_column_name, user_name, host=None, port=None, doubleSided=False, layerId=None):
     user = getpass.getuser() if user_name is None else user_name
 
     try:
@@ -262,7 +267,7 @@ def from_db(db_name, table_name, column_name, id_column_name, user_name, host=No
         [0, 0, 0, 1]], dtype=float)
     transform = transform.flatten('F')
 
-    wkbs2tileset(wkbs, extentNonRotated, ids, transform, doubleSided)
+    wkbs2tileset(wkbs, extentNonRotated, ids, transform, doubleSided, layerId)
 
 
 def from_directory(directory, offset, doubleSided=False):
@@ -322,6 +327,9 @@ def init_parser(subparser, str2bool):
     ds_help = 'glTF doubleSided'
     parser.add_argument('-ds', metavar='DOUBLESIDED', type=bool, help=ds_help)
 
+    lid_help = 'layer Id'
+    parser.add_argument('-lid', metavar='LAYERID', type=str, help=lid_help)
+
 
 def main(args):
     if args.D is not None:
@@ -329,7 +337,7 @@ def main(args):
             print('Error: please define a table (-t) and column (-c)')
             exit()
 
-        from_db(args.D, args.t, args.c, args.i, args.u, args.H, args.P, args.ds)
+        from_db(args.D, args.t, args.c, args.i, args.u, args.H, args.P, args.ds, args.lid)
     elif args.d is not None:
         from_directory(args.d, args.o)
     else:
