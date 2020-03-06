@@ -44,7 +44,7 @@ class Node():
         self.features = features
         if len(features) == 1:
             self.box = None
-            self.children = []
+        self.children = []
 
     def add(self, node):
         self.children.append(node)
