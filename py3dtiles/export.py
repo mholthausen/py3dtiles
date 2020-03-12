@@ -38,9 +38,8 @@ class Feature():
 class Node():
     counter = 0
 
-    def __init__(self, features=[], layerId=None):
+    def __init__(self, features=[]):
         self.id = Node.counter
-        self.layerId = layerId
         Node.counter += 1
         self.features = features
         if len(features) == 1:
@@ -60,16 +59,16 @@ class Node():
         for g in self.features:
             self.box.add(g.box)
 
-    def to_tileset(self, transform):
+    def to_tileset(self, transform, layerId):
         self.compute_bbox()
         tiles = {
             "asset": {"version": "1.0"},
             "geometricError": 5000,  # TODO
-            "root": self.to_tileset_r(5000)
+            "root": self.to_tileset_r(5000, layerId)
         }
         return tiles
 
-    def to_tileset_r(self, error):
+    def to_tileset_r(self, error, layerId):
         (c1, c2) = (self.box.min, self.box.max)
         center = [(c1[i] + c2[i]) / 2 for i in range(0, 3)]
         xAxis = [(c2[0] - c1[0]) / 2, 0, 0]
@@ -81,12 +80,17 @@ class Node():
                 "box": box
             },
             "geometricError": error,  # TODO
-            "children": [n.to_tileset_r(error / 2.) for n in self.children],
+            "children": [n.to_tileset_r(error / 2., layerId) for n in self.children],
             "refine": "ADD",
-            "extras": {
-                "id": self.layerId
-            }
         }
+
+        if(len(self.children) > 0):
+            key = "extras"
+            value = {
+                "id": layerId
+            }
+            if key not in tile:
+                tile[key] = value
 
         if len(self.features) != 0:
             tile["content"] = {
@@ -149,11 +153,11 @@ def arrays2tileset(positions, normals, bboxes, bboxesNonRotated, transform, ids=
     npTiles = np.asarray(tilesArr)
     npTiles = npTiles[np.argsort(npTiles[:, 0])]
     for npTile in npTiles:
-        node = Node([npTile[1]], layerId=layerId)
+        node = Node([npTile[1]])
         tree.add(node)
 
     # Export b3dm & tileset
-    tileset = tree.to_tileset(transform)
+    tileset = tree.to_tileset(transform, layerId=layerId)
     f = open("tileset.json".format(node.id), 'w')
     f.write(json.dumps(tileset))
     print("Creating tiles...")
